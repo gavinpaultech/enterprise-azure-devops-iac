@@ -6,10 +6,16 @@ trigger:
 pool:
   vmImage: ubuntu-latest
 
+variables:
+  serviceConnection: 'Enterprise-Infrastructure-SC'
+
 steps:
 
 - checkout: self
 
+#
+# Install Terraform
+#
 - script: |
     sudo apt-get update
     sudo apt-get install -y gnupg software-properties-common
@@ -23,12 +29,37 @@ steps:
     terraform version
   displayName: Install Terraform
 
-- script: terraform fmt -check
-  workingDirectory: terraform
-  displayName: Terraform Format Check
+#
+# Azure Login
+#
+- task: AzureCLI@2
+  displayName: Azure Login
+  inputs:
+    azureSubscription: $(serviceConnection)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      az account show
 
+#
+# Terraform Validate
+#
 - script: |
     terraform init
     terraform validate
   workingDirectory: terraform
   displayName: Terraform Validate
+
+#
+# Terraform Plan
+#
+- task: AzureCLI@2
+  displayName: Terraform Plan
+  inputs:
+    azureSubscription: $(serviceConnection)
+    scriptType: bash
+    scriptLocation: inlineScript
+    inlineScript: |
+      cd terraform
+      terraform plan \
+        -var="tenant_id=$(az account show --query tenantId -o tsv)"
