@@ -51,4 +51,50 @@ stages:
       displayName: Publish Terraform Plan
       inputs:
         targetPath: terraform/tfplan
-        artifact: terraform-plan
+        artifact: tfplan
+
+- stage: Deploy
+  displayName: Deploy Infrastructure
+  dependsOn: Plan
+
+  jobs:
+
+  - deployment: TerraformApply
+
+    displayName: Terraform Apply
+
+    environment: Production
+
+    strategy:
+
+      runOnce:
+
+        deploy:
+
+          steps:
+
+          - checkout: self
+
+          - download: current
+            artifact: tfplan
+
+          - script: |
+              terraform version
+            displayName: Verify Terraform
+
+          - task: AzureCLI@2
+            displayName: Terraform Apply
+
+            inputs:
+              azureSubscription: $(serviceConnection)
+              scriptType: bash
+              scriptLocation: inlineScript
+
+              inlineScript: |
+                cd terraform
+
+                terraform init
+
+                terraform apply \
+                  -auto-approve \
+                  "$(Pipeline.Workspace)/tfplan/tfplan"
