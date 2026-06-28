@@ -1,33 +1,54 @@
-steps:
+trigger:
+  branches:
+    include:
+      - main
 
-- checkout: self
+pool:
+  name: Default
 
-- script: |
-    terraform version
-  displayName: Verify Terraform
+variables:
+- name: serviceConnection
+  value: Enterprise-Infrastructure-SC
 
-- task: AzureCLI@2
-  displayName: Azure Login
-  inputs:
-    azureSubscription: $(serviceConnection)
-    scriptType: bash
-    scriptLocation: inlineScript
-    inlineScript: |
-      az account show
+stages:
+- stage: Validate
+  jobs:
+  - job: ValidateTerraform
+    steps:
+    - checkout: self
 
-- script: |
-    terraform init
-    terraform validate
-  workingDirectory: terraform
-  displayName: Terraform Validate
+    - script: terraform version
+      displayName: Verify Terraform
 
-- task: AzureCLI@2
-  displayName: Terraform Plan
-  inputs:
-    azureSubscription: $(serviceConnection)
-    scriptType: bash
-    scriptLocation: inlineScript
-    inlineScript: |
-      cd terraform
-      terraform plan \
-        -var="tenant_id=$(az account show --query tenantId -o tsv)"
+    - script: |
+        terraform init
+        terraform fmt -check
+        terraform validate
+      workingDirectory: terraform
+      displayName: Terraform Validate
+
+- stage: Plan
+  dependsOn: Validate
+  jobs:
+  - job: TerraformPlan
+    steps:
+    - checkout: self
+
+    - task: AzureCLI@2
+      displayName: Terraform Plan
+      inputs:
+        azureSubscription: $(serviceConnection)
+        scriptType: bash
+        scriptLocation: inlineScript
+        inlineScript: |
+          cd terraform
+          terraform init
+          terraform plan \
+            -out=tfplan \
+            -var="tenant_id=$(az account show --query tenantId -o tsv)"
+
+    - task: PublishPipelineArtifact@1
+      displayName: Publish Terraform Plan
+      inputs:
+        targetPath: terraform/tfplan
+        artifact: terraform-plan
